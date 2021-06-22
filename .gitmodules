@@ -1,0 +1,4 @@
+[submodule "LeetCode-Solutions"]
+	path = LeetCode-Solutions
+	url = https://github.com/kamyu104/LeetCode-Solutions.git
+	branch = master
