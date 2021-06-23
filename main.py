@@ -2,6 +2,8 @@ import sys
 import os
 import pandas as pd
 import click
+import bs4 as bs
+import requests
 from tabulate import tabulate
 
 import apis
@@ -9,7 +11,27 @@ import session
 import urls
 
 
-def get_list_of_unsolved_questions(leetcode_client):
+def get_solution_tables():
+    soup = bs.BeautifulSoup(requests.get(urls.SOLVED_GITHUB_REPO).content, 'lxml')
+    html_table_list = soup.find_all('table')
+    list_of_tables = pd.read_html(str(html_table_list), encoding='utf-8', header=0)
+
+    temp_solution_filename_column = []
+    table_rows = [tag.find_all('tr') for tag in html_table_list]
+    for i, table in enumerate(table_rows):
+        for row in table[1:]:
+            all_cells = row.find_all('td')
+            solution_links = ','.join([a['href'].split('/')[-1] for a in all_cells[2].find_all('a', href=True)])
+            temp_solution_filename_column.append(solution_links)
+
+        list_of_tables[i]['Solution Files'] = pd.Series(temp_solution_filename_column)
+        temp_solution_filename_column =[]
+        print()
+
+    return list_of_tables
+
+
+def get_list_of_unsolved_questions(leetcode_client, list_of_tables):
     """
 
     Parameters
@@ -17,26 +39,26 @@ def get_list_of_unsolved_questions(leetcode_client):
     leetcode_client
         The LeetCode Session Client
 
+    list_of_tables
+        The list of DataFrames containing all the tables in LeetCode-Solutions repo
+
     Returns
     -------
     Sized
     """
-    list_of_tables = pd.read_html(urls.SOLVED_GITHUB_REPO)
     leetcode_list_of_problems = leetcode_client.get_problems()
     total_solved_questions = []
     for table in list_of_tables:
         total_solved_questions.extend(table['#'].values.tolist())
 
     total_lc_questions = []
-    question_title_slug = []
-    question_title = []
+    questions = {}
     for question in leetcode_list_of_problems:
         total_lc_questions.append(question.frontend_question_id)
-        question_title_slug.append(question.title_slug)
-        question_title.append(question.title)
+        questions[question.frontend_question_id] = [question.title_slug, question.title]
 
     difference_between_questions = set(total_lc_questions).difference(set(total_solved_questions))
-    return [[question_id, question_title[question_id], question_title_slug[question_id]] for question_id in
+    return [[question_id, questions[question_id][1], questions[question_id][0]] for question_id in
             difference_between_questions]
 
 
@@ -45,7 +67,8 @@ def get_list_of_unsolved_questions(leetcode_client):
               help='List number of leetcode questions, number of solved questions and number of unsolved questions')
 @click.option('-u', '--username', default=None, type=str, help='Username of your Leetcode account')
 @click.option('-p', '--password', default=None, type=str, help='Password of your Leetcode account')
-def main(show, username, password):
+@click.option('-o', '--output-dir', default='output', type=str, help='Output directory to store the files')
+def main(show, username, password, output_dir):
     """
     Main function
     Returns
@@ -66,13 +89,31 @@ def main(show, username, password):
                            os.environ['LEETCODE_PASSWORD'] if password is None else password)
     leetcode_client = apis.LeetCodeClient()
 
-    # ===== Step 2: If show list is True =====
+    list_of_tables = get_solution_tables()
+    # ===== Step 2: If show list is True, then display it =====
     if show is True:
-        difference_with_questions = get_list_of_unsolved_questions(leetcode_client)
+        difference_with_questions = get_list_of_unsolved_questions(leetcode_client, list_of_tables)
         print(f'Total number of unsolved questions are {len(difference_with_questions)}')
         print('The unsolved questions are:')
         print(tabulate(difference_with_questions))
 
+    # ===== Step 3: Combine all the tables =====
+    solution_table = pd.DataFrame(columns=list_of_tables[0].columns)
+    for table in list_of_tables:
+        solution_table = solution_table.append(table)
+    solution_table.reset_index(drop=True, inplace=True)
+
+    # ===== Step 3: Get all the problems as a "Problems" class for further sifting =====
+    problems_table = []
+    problems = leetcode_client.get_problems()
+    for problem in problems:
+        problems_table.append([problem.frontend_question_id, problem.title_slug])
+    problems_table = pd.DataFrame(problems_table, columns=['#', 'Title Slug'])
+
+    solution_table = solution_table.merge(problems_table, on='#')
+    solution_table.index = solution_table['#']
+    solution_table.sort_index(inplace=True)
+    # leetcode_client.get_problem_detail('two-sum')
     return 0
 
 
