@@ -232,7 +232,7 @@ def main(show, username, password, output_dir, bifurcate):
         solution_group = solution_table.replace('Meidum', 'Medium').groupby('Difficulty')
         for name, solution_group_table in solution_group:
             chapters = generate_epub_and_save(leetcode_client, solution_group_table.reset_index(drop=True))
-            epub_writer.write(f"Leetcode_{name}.epub", "Leetcode Questions", "Anonymous", chapters)
+            epub_writer.write(f"Leetcode_{name}.epub", f"Leetcode {name}", "Anonymous", chapters)
     else:
         chapters = generate_epub_and_save(leetcode_client, solution_table)
         epub_writer.write("Leetcode_All.epub", "Leetcode Questions", "Anonymous", chapters)
