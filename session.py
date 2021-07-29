@@ -1,4 +1,5 @@
-import requests as requests
+import requests
+from pycookiecheat import chrome_cookies
 import urls
 
 
@@ -16,11 +17,14 @@ class LeetCodeSession:
 
     def login(self, username: str, password: str) -> bool:
         self.s.get(urls.LOGIN)
+        cookies = chrome_cookies(urls.LOGIN)
+        self.s.cookies = requests.utils.cookiejar_from_dict(cookies)
         csrf = self.s.cookies.get("csrftoken")
         self.s.post(urls.LOGIN, data={"login": username, "password": password, "remember": "on",
                                       "csrfmiddlewaretoken": csrf},
                     headers={"referer": urls.LOGIN})
-        return self.check_login()
+        # return self.check_login()
+        return True
 
     def logout(self) -> bool:
         self.s.get(urls.LOGOUT)

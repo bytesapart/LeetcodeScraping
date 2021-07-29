@@ -1,5 +1,7 @@
 import sys
 import os
+from time import sleep
+
 import pandas as pd
 import click
 import bs4 as bs
@@ -140,7 +142,14 @@ def generate_epub_and_save(leetcode_client, solution_table):
         # question_tree = lxml.html.fromstring(leetcode_client.get_problem_detail(row[1]['Title Slug']).description)
         question_tree = leetcode_client.get_problem_detail(row[1]['Title Slug']).description
         if question_tree is None:
-            continue
+            i = 0
+            while True:
+                sleep(20)
+                i = i+1
+                print(f'{row[1]["Title"]} not found. Retrying. Try number {i}')
+                question_tree = leetcode_client.get_problem_detail(row[1]['Title Slug']).description
+                if question_tree is not None:
+                    break
         print(row[1]['Title'])
         question_tree = question_tree.replace("<pre>", "<pre><code class=\"language-plaintext\">").replace("</pre>",
                                                                                                            "</code></pre>")
