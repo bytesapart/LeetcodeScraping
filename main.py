@@ -5,6 +5,8 @@ import click
 import bs4 as bs
 import requests
 from tabulate import tabulate
+from ebooklib import epub
+import epub_writer
 
 import apis
 import session
@@ -25,7 +27,7 @@ def get_solution_tables():
             temp_solution_filename_column.append(solution_links)
 
         list_of_tables[i]['Solution Files'] = pd.Series(temp_solution_filename_column)
-        temp_solution_filename_column =[]
+        temp_solution_filename_column = []
         print()
 
     return list_of_tables
@@ -62,13 +64,116 @@ def get_list_of_unsolved_questions(leetcode_client, list_of_tables):
             difference_between_questions]
 
 
+def get_highlightjs_stub():
+    """
+    Get HighlightJS node as an etree
+    Returns
+    -------
+    etree
+    """
+    raw_html = """
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.1.0/highlight.min.js" integrity="sha512-z+/WWfyD5tccCukM4VvONpEtLmbAm5LDu7eKiyMQJ9m7OfPEDL7gENyDRL3Yfe8XAuGsS2fS4xSMnl6d30kqGQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.1.0/styles/atom-one-dark.min.css" integrity="sha512-Jk4AqjWsdSzSWCSuQTfYRIF84Rq/eV0G2+tu07byYwHcbTGfdmLrHjUSwvzp5HvbiqK4ibmNwdcG49Y5RGYPTg==" crossorigin="anonymous" referrerpolicy="no-referrer"></link>
+<script>hljs.highlightAll();</script>
+    """
+    return raw_html
+    # return lxml.html.fromstring(raw_html)
+
+
+def get_solutions(solution_series):
+    """
+
+    Parameters
+    ----------
+    solution_series
+        Solution Table
+    Returns
+    -------
+    dict
+    """
+    solution_files = solution_series['Solution Files'].split(',')
+    full_solution_files = {}
+    for single_file in solution_files:
+        try:
+            if single_file.endswith('.cpp'):
+                with open(os.path.join(os.getcwd(), 'LeetCode-Solutions', 'C++', single_file)) as f:
+                    content = f.read()
+                    content = '<pre><code class="language-cpp">' + content + '</code></pre>'
+                    full_solution_files['C++'] = content
+            elif single_file.endswith('.py'):
+                with open(os.path.join(os.getcwd(), 'LeetCode-Solutions', 'Python', single_file)) as f:
+                    content = f.read()
+                    content = '<pre><code class="language-python">' + content + '</code></pre>'
+                    full_solution_files['Python'] = content
+            elif single_file.endswith('.sh'):
+                with open(os.path.join(os.getcwd(), 'LeetCode-Solutions', 'Shell', single_file)) as f:
+                    content = f.read()
+                    content = '<pre><code class="language-bash">' + content + '</code></pre>'
+                    full_solution_files['Bash'] = content
+            elif single_file.endswith('.sql'):
+                with open(os.path.join(os.getcwd(), 'LeetCode-Solutions', 'MySQL', single_file)) as f:
+                    content = f.read()
+                    content = '<pre><code class="language-sql">' + content + '</code></pre>'
+                    full_solution_files['Shell'] = content
+        except FileNotFoundError:
+            print(f'File not found for {single_file}. Continuing!')
+    return full_solution_files
+
+
+def generate_epub_and_save(leetcode_client, solution_table):
+    """
+
+    Parameters
+    ----------
+    leetcode_client
+        The leetcode client
+    solution_table
+        The DataFrame containing title stub to lookup and the file name to process
+
+    Returns
+    -------
+    list
+    """
+    chapters = []
+    highlight_stub = get_highlightjs_stub()
+    for row in solution_table.iterrows():
+        # question_tree = lxml.html.fromstring(leetcode_client.get_problem_detail(row[1]['Title Slug']).description)
+        question_tree = leetcode_client.get_problem_detail(row[1]['Title Slug']).description
+        if question_tree is None:
+            continue
+        print(row[1]['Title'])
+        question_tree = question_tree.replace("<pre>", "<pre><code class=\"language-plaintext\">").replace("</pre>",
+                                                                                                           "</code></pre>")
+        solutions = get_solutions(row[1])
+        final_string = question_tree + highlight_stub
+
+        n = len(row[1]['Title'])
+        title_decorator = '*' * n
+        problem_title_html = title_decorator + f'<div id="title">{row[1]["Title"]}</div>' + '\n' + title_decorator + '<br><br><hr><br>'
+
+        c = epub.EpubHtml(title=row[1]['Title'], file_name=f'chap_{row[1].name}.html', lang='en')
+        c.content = problem_title_html + final_string
+        chapters.append(c)
+
+        for key, solution in solutions.items():
+            problem_title_html = title_decorator + f'<div id="title">{row[1]["Title"]}({key})</div>' + '\n' + title_decorator + '<br><br><hr><br>'
+            solution = problem_title_html + solution + highlight_stub
+            c = epub.EpubHtml(title=row[1]['Title'] + '(' + key + ')',
+                              file_name=f'chap_{row[1].name}_Solution({key}).html', lang='en')
+            c.content = solution
+            chapters.append(c)
+
+    return chapters
+
+
 @click.command()
 @click.option('-s', '--show', default=False, type=bool,
               help='List number of leetcode questions, number of solved questions and number of unsolved questions')
 @click.option('-u', '--username', default=None, type=str, help='Username of your Leetcode account')
 @click.option('-p', '--password', default=None, type=str, help='Password of your Leetcode account')
-@click.option('-o', '--output-dir', default='output', type=str, help='Output directory to store the files')
-def main(show, username, password, output_dir):
+@click.option('-o', '--output-dir', default=None, type=str, help='Output directory to store the files')
+@click.option('-b', '--bifurcate', default=False, type=bool, help='Bifurcate on the basis of problem difficulty')
+def main(show, username, password, output_dir, bifurcate):
     """
     Main function
     Returns
@@ -89,7 +194,7 @@ def main(show, username, password, output_dir):
                            os.environ['LEETCODE_PASSWORD'] if password is None else password)
     leetcode_client = apis.LeetCodeClient()
 
-    list_of_tables = get_solution_tables()
+    list_of_tables = get_solution_tables()[1:]  # Remove the summary table
     # ===== Step 2: If show list is True, then display it =====
     if show is True:
         difference_with_questions = get_list_of_unsolved_questions(leetcode_client, list_of_tables)
@@ -113,7 +218,15 @@ def main(show, username, password, output_dir):
     solution_table = solution_table.merge(problems_table, on='#')
     solution_table.index = solution_table['#']
     solution_table.sort_index(inplace=True)
-    # leetcode_client.get_problem_detail('two-sum')
+
+    if bifurcate is True:
+        solution_group = solution_table.replace('Meidum', 'Medium').groupby('Difficulty')
+        for name, solution_group_table in solution_group:
+            chapters = generate_epub_and_save(leetcode_client, solution_group_table.reset_index(drop=True))
+            epub_writer.write(f"Leetcode_{name}.epub", "Leetcode Questions", "Anonymous", chapters)
+    else:
+        chapters = generate_epub_and_save(leetcode_client, solution_table)
+        epub_writer.write("Leetcode_All.epub", "Leetcode Questions", "Anonymous", chapters)
     return 0
 
 
