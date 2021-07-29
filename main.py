@@ -71,15 +71,18 @@ def get_highlightjs_stub():
     Get HighlightJS node as an etree
     Returns
     -------
-    etree
+    str
     """
-    raw_html = """
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.1.0/highlight.min.js" integrity="sha512-z+/WWfyD5tccCukM4VvONpEtLmbAm5LDu7eKiyMQJ9m7OfPEDL7gENyDRL3Yfe8XAuGsS2fS4xSMnl6d30kqGQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.1.0/styles/atom-one-dark.min.css" integrity="sha512-Jk4AqjWsdSzSWCSuQTfYRIF84Rq/eV0G2+tu07byYwHcbTGfdmLrHjUSwvzp5HvbiqK4ibmNwdcG49Y5RGYPTg==" crossorigin="anonymous" referrerpolicy="no-referrer"></link>
-<script>hljs.highlightAll();</script>
-    """
+    raw_html = '<script>'
+    with open('highlight.min.js') as f:
+        text = f.read()
+        raw_html = raw_html + text + ' hljs.highlightAll();</script>'
+
+    with open('atom-one-dark.min.css') as f:
+        text = f.read()
+        raw_html = raw_html + '<style>' + text + '</style>'
+
     return raw_html
-    # return lxml.html.fromstring(raw_html)
 
 
 def get_solutions(solution_series):
@@ -144,7 +147,7 @@ def generate_epub_and_save(leetcode_client, solution_table):
         if question_tree is None:
             i = 0
             while True:
-                sleep(20)
+                sleep(5)
                 i = i+1
                 print(f'{row[1]["Title"]} not found. Retrying. Try number {i}')
                 question_tree = leetcode_client.get_problem_detail(row[1]['Title Slug']).description
@@ -169,6 +172,14 @@ def generate_epub_and_save(leetcode_client, solution_table):
             solution = problem_title_html + solution + highlight_stub
             c = epub.EpubHtml(title=row[1]['Title'] + '(' + key + ')',
                               file_name=f'chap_{row[1].name}_Solution({key}).html', lang='en')
+            # Set Styles and stuff
+            # hljs = epub.EpubItem(file_name='highlight.min.js')
+            # atom_one_dark = epub.EpubItem(file_name='atom-one-dark.min.css')
+            # mainjs = epub.EpubItem(file_name='main.js')
+            #
+            # c.add_item(hljs)
+            # c.add_item(atom_one_dark)
+            # c.add_item(mainjs)
             c.content = solution
             chapters.append(c)
 
