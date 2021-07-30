@@ -173,7 +173,6 @@ def generate_epub_and_save(leetcode_client, solution_table):
                               file_name=f'chap_{row[1].name}_Solution({key}).html', lang='en')
             c.content = solution
             chapters.append(c)
-        break
 
     return chapters
 
