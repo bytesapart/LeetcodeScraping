@@ -74,11 +74,11 @@ def get_highlightjs_stub():
     str
     """
     raw_html = '<script>'
-    with open('highlight.min.js') as f:
+    with open('prism.js') as f:
         text = f.read()
-        raw_html = raw_html + text + ' hljs.highlightAll();</script>'
+        raw_html = raw_html + text + '</script>'
 
-    with open('atom-one-dark.min.css') as f:
+    with open('prism-onedark.css') as f:
         text = f.read()
         raw_html = raw_html + '<style>' + text + '</style>'
 
@@ -103,22 +103,22 @@ def get_solutions(solution_series):
             if single_file.endswith('.cpp'):
                 with open(os.path.join(os.getcwd(), 'LeetCode-Solutions', 'C++', single_file)) as f:
                     content = f.read()
-                    content = '<pre><code class="language-cpp">' + content + '</code></pre>'
+                    content = '<pre class="line-numbers"><code class="language-cpp">' + content + '</code></pre>'
                     full_solution_files['C++'] = content
             elif single_file.endswith('.py'):
                 with open(os.path.join(os.getcwd(), 'LeetCode-Solutions', 'Python', single_file)) as f:
                     content = f.read()
-                    content = '<pre><code class="language-python">' + content + '</code></pre>'
+                    content = '<pre class="line-numbers"><code class="language-python">' + content + '</code></pre>'
                     full_solution_files['Python'] = content
             elif single_file.endswith('.sh'):
                 with open(os.path.join(os.getcwd(), 'LeetCode-Solutions', 'Shell', single_file)) as f:
                     content = f.read()
-                    content = '<pre><code class="language-bash">' + content + '</code></pre>'
+                    content = '<pre class="line-numbers"><code class="language-bash">' + content + '</code></pre>'
                     full_solution_files['Bash'] = content
             elif single_file.endswith('.sql'):
                 with open(os.path.join(os.getcwd(), 'LeetCode-Solutions', 'MySQL', single_file)) as f:
                     content = f.read()
-                    content = '<pre><code class="language-sql">' + content + '</code></pre>'
+                    content = '<pre class="line-numbers"><code class="language-sql">' + content + '</code></pre>'
                     full_solution_files['Shell'] = content
         except FileNotFoundError:
             print(f'File not found for {single_file}. Continuing!')
@@ -142,7 +142,6 @@ def generate_epub_and_save(leetcode_client, solution_table):
     chapters = []
     highlight_stub = get_highlightjs_stub()
     for row in solution_table.iterrows():
-        # question_tree = lxml.html.fromstring(leetcode_client.get_problem_detail(row[1]['Title Slug']).description)
         question_tree = leetcode_client.get_problem_detail(row[1]['Title Slug']).description
         if question_tree is None:
             i = 0
@@ -172,16 +171,9 @@ def generate_epub_and_save(leetcode_client, solution_table):
             solution = problem_title_html + solution + highlight_stub
             c = epub.EpubHtml(title=row[1]['Title'] + '(' + key + ')',
                               file_name=f'chap_{row[1].name}_Solution({key}).html', lang='en')
-            # Set Styles and stuff
-            # hljs = epub.EpubItem(file_name='highlight.min.js')
-            # atom_one_dark = epub.EpubItem(file_name='atom-one-dark.min.css')
-            # mainjs = epub.EpubItem(file_name='main.js')
-            #
-            # c.add_item(hljs)
-            # c.add_item(atom_one_dark)
-            # c.add_item(mainjs)
             c.content = solution
             chapters.append(c)
+        break
 
     return chapters
 
