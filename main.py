@@ -257,8 +257,7 @@ def main(show, username, password, bifurcate):
     if bifurcate is True:
         solution_group = solution_table.replace('Meidum', 'Medium').groupby('Difficulty')
         for name, solution_group_table in solution_group:
-            if name == 'Medium':
-                generate_epub_and_pdf(leetcode_client, solution_group_table.reset_index(drop=True), temp_html_dir, name)
+            generate_epub_and_pdf(leetcode_client, solution_group_table.reset_index(drop=True), temp_html_dir, name)
 
     else:
         generate_epub_and_pdf(leetcode_client, solution_table, temp_html_dir, "All")
