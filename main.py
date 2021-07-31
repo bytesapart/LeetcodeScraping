@@ -1,7 +1,8 @@
 import sys
 import os
 from time import sleep
-
+import tempfile
+import pdfkit
 import pandas as pd
 import click
 import bs4 as bs
@@ -125,7 +126,7 @@ def get_solutions(solution_series):
     return full_solution_files
 
 
-def generate_epub_and_save(leetcode_client, solution_table):
+def generate_epub_and_html(leetcode_client, solution_table, temp_html_dir):
     """
 
     Parameters
@@ -134,12 +135,15 @@ def generate_epub_and_save(leetcode_client, solution_table):
         The leetcode client
     solution_table
         The DataFrame containing title stub to lookup and the file name to process
+    temp_html_dir
+        Temporary directory to store HTML files
 
     Returns
     -------
     list
     """
     chapters = []
+    html_files = []
     highlight_stub = get_highlightjs_stub()
     for row in solution_table.iterrows():
         question_tree = leetcode_client.get_problem_detail(row[1]['Title Slug']).description
@@ -147,7 +151,7 @@ def generate_epub_and_save(leetcode_client, solution_table):
             i = 0
             while True:
                 sleep(5)
-                i = i+1
+                i = i + 1
                 print(f'{row[1]["Title"]} not found. Retrying. Try number {i}')
                 question_tree = leetcode_client.get_problem_detail(row[1]['Title Slug']).description
                 if question_tree is not None:
@@ -160,21 +164,28 @@ def generate_epub_and_save(leetcode_client, solution_table):
 
         n = len(row[1]['Title'])
         title_decorator = '*' * n
-        problem_title_html = title_decorator + f'<div id="title">{row[1]["Title"]}</div>' + '\n' + title_decorator + '<br><br><hr><br>'
+        problem_title_html = title_decorator + f'<h1 id="title">{row[1]["Title"]}</h1>' + '\n' + title_decorator + '<br><br><hr><br>'
 
         c = epub.EpubHtml(title=row[1]['Title'], file_name=f'chap_{row[1].name}.html', lang='en')
         c.content = problem_title_html + final_string
         chapters.append(c)
 
+        with open(os.path.join(temp_html_dir.name, f'chap_{row[1].name}.html'), 'w') as html_chap:
+            html_chap.write(problem_title_html + final_string)
+        html_files.append(os.path.join(temp_html_dir.name, f'chap_{row[1].name}.html'))
+
         for key, solution in solutions.items():
-            problem_title_html = title_decorator + f'<div id="title">{row[1]["Title"]}({key})</div>' + '\n' + title_decorator + '<br><br><hr><br>'
+            problem_title_html = title_decorator + f'<h1 id="title">{row[1]["Title"]}({key})</h1>' + '\n' + title_decorator + '<br><br><hr><br>'
             solution = problem_title_html + solution + highlight_stub
             c = epub.EpubHtml(title=row[1]['Title'] + '(' + key + ')',
                               file_name=f'chap_{row[1].name}_Solution({key}).html', lang='en')
             c.content = solution
             chapters.append(c)
 
-    return chapters
+            with open(os.path.join(temp_html_dir.name, f'chap_{row[1].name}_Solution({key}).html'), 'w') as html_chap:
+                html_chap.write(solution)
+            html_files.append(os.path.join(temp_html_dir.name, f'chap_{row[1].name}_Solution({key}).html'))
+    return chapters, html_files
 
 
 @click.command()
@@ -182,9 +193,8 @@ def generate_epub_and_save(leetcode_client, solution_table):
               help='List number of leetcode questions, number of solved questions and number of unsolved questions')
 @click.option('-u', '--username', default=None, type=str, help='Username of your Leetcode account')
 @click.option('-p', '--password', default=None, type=str, help='Password of your Leetcode account')
-@click.option('-o', '--output-dir', default=None, type=str, help='Output directory to store the files')
 @click.option('-b', '--bifurcate', default=False, type=bool, help='Bifurcate on the basis of problem difficulty')
-def main(show, username, password, output_dir, bifurcate):
+def main(show, username, password, bifurcate):
     """
     Main function
     Returns
@@ -230,14 +240,20 @@ def main(show, username, password, output_dir, bifurcate):
     solution_table.index = solution_table['#']
     solution_table.sort_index(inplace=True)
 
+    temp_html_dir = tempfile.TemporaryDirectory()
     if bifurcate is True:
         solution_group = solution_table.replace('Meidum', 'Medium').groupby('Difficulty')
         for name, solution_group_table in solution_group:
-            chapters = generate_epub_and_save(leetcode_client, solution_group_table.reset_index(drop=True))
+            chapters, html_files = generate_epub_and_html(leetcode_client, solution_group_table.reset_index(drop=True),
+                                                          temp_html_dir)
             epub_writer.write(f"Leetcode_{name}.epub", f"Leetcode {name}", "Anonymous", chapters)
+            pdfkit.from_file(html_files, f"Leetcode_{name}.pdf", toc={'xsl-style-sheet': 'default.xsl'},
+                             cover='cover.html', cover_first=True, options={'enable-local-file-access': ""})
     else:
-        chapters = generate_epub_and_save(leetcode_client, solution_table)
+        chapters, html_files = generate_epub_and_html(leetcode_client, solution_table, temp_html_dir)
         epub_writer.write("Leetcode_All.epub", "Leetcode Questions", "Anonymous", chapters)
+        pdfkit.from_file(html_files, f"Leetcode_All.pdf", toc={'xsl-style-sheet': 'default.xsl'}, cover='cover.html',
+                         cover_first=True, options={'enable-local-file-access': ""})
     return 0
 
 

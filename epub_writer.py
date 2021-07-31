@@ -15,9 +15,18 @@ def write(file_name, title, author, chapters):
     book.set_language('en')
     book.add_author(author)
     book.add_author('Anonymous', file_as='Anonymous', role='ill', uid='coauthor')
+    with open('LeetCode_Sharing.png', 'rb') as logo:
+        book.add_item(
+            epub.EpubItem('cover-image', file_name='LeetCode_Sharing.png', media_type='image/png', content=logo.read()))
+    c1 = epub.EpubHtml(title='Cover', file_name='cover_2.html', lang='en')
+    with open('cover.html', 'r') as cover_html:
+        content = cover_html.read()
+        book.set_cover('cover.html', content)
+        c1.content = content
+    book.add_item(c1)
 
     toc = []
-    spine = ['nav']
+    spine = [c1, 'nav']
     # For each chapter add chapter to the book, TOC and spine
     for chapter in chapters:
         book.add_item(chapter)
