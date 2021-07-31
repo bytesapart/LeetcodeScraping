@@ -81,7 +81,7 @@ def get_highlightjs_stub():
 
     with open('prism-onedark.css') as f:
         text = f.read()
-        raw_html = raw_html + '<style>' + text + '</style>'
+        raw_html = raw_html + '<style>' + text + ' code[class*="language-"], pre[class*="language-"] {font-size: 12px}</style>'
 
     return raw_html
 
@@ -126,7 +126,7 @@ def get_solutions(solution_series):
     return full_solution_files
 
 
-def generate_epub_and_html(leetcode_client, solution_table, temp_html_dir):
+def generate_epub_and_pdf(leetcode_client, solution_table, temp_html_dir, name):
     """
 
     Parameters
@@ -137,15 +137,18 @@ def generate_epub_and_html(leetcode_client, solution_table, temp_html_dir):
         The DataFrame containing title stub to lookup and the file name to process
     temp_html_dir
         Temporary directory to store HTML files
+    name
+        Name of the file to output
 
     Returns
     -------
-    list
+    None
     """
     chapters = []
     html_files = []
     highlight_stub = get_highlightjs_stub()
-    for row in solution_table.iterrows():
+    part = 1
+    for it, row in enumerate(solution_table.iterrows()):
         question_tree = leetcode_client.get_problem_detail(row[1]['Title Slug']).description
         if question_tree is None:
             i = 0
@@ -185,7 +188,17 @@ def generate_epub_and_html(leetcode_client, solution_table, temp_html_dir):
             with open(os.path.join(temp_html_dir.name, f'chap_{row[1].name}_Solution({key}).html'), 'w') as html_chap:
                 html_chap.write(solution)
             html_files.append(os.path.join(temp_html_dir.name, f'chap_{row[1].name}_Solution({key}).html'))
-    return chapters, html_files
+
+        # Flush to PDF because known bug in wkhtmltopdf
+        if it % 330 == 0 and it != 0:
+            pdfkit.from_file(html_files, f"Leetcode_{name}{part}.pdf", toc={'xsl-style-sheet': 'default.xsl'},
+                             cover='cover.html', cover_first=True, options={'enable-local-file-access': ""})
+            part = part + 1
+            html_files = []
+
+    pdfkit.from_file(html_files, f"Leetcode_{name}{part}.pdf", toc={'xsl-style-sheet': 'default.xsl'},
+                     cover='cover.html', cover_first=True, options={'enable-local-file-access': ""})
+    epub_writer.write(f"Leetcode_{name}.epub", f"Leetcode {name}", "Anonymous", chapters)
 
 
 @click.command()
@@ -244,16 +257,12 @@ def main(show, username, password, bifurcate):
     if bifurcate is True:
         solution_group = solution_table.replace('Meidum', 'Medium').groupby('Difficulty')
         for name, solution_group_table in solution_group:
-            chapters, html_files = generate_epub_and_html(leetcode_client, solution_group_table.reset_index(drop=True),
-                                                          temp_html_dir)
-            epub_writer.write(f"Leetcode_{name}.epub", f"Leetcode {name}", "Anonymous", chapters)
-            pdfkit.from_file(html_files, f"Leetcode_{name}.pdf", toc={'xsl-style-sheet': 'default.xsl'},
-                             cover='cover.html', cover_first=True, options={'enable-local-file-access': ""})
+            if name == 'Medium':
+                generate_epub_and_pdf(leetcode_client, solution_group_table.reset_index(drop=True), temp_html_dir, name)
+
     else:
-        chapters, html_files = generate_epub_and_html(leetcode_client, solution_table, temp_html_dir)
-        epub_writer.write("Leetcode_All.epub", "Leetcode Questions", "Anonymous", chapters)
-        pdfkit.from_file(html_files, f"Leetcode_All.pdf", toc={'xsl-style-sheet': 'default.xsl'}, cover='cover.html',
-                         cover_first=True, options={'enable-local-file-access': ""})
+        generate_epub_and_pdf(leetcode_client, solution_table, temp_html_dir, "All")
+
     return 0
 
 
